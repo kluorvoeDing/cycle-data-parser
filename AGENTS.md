@@ -74,3 +74,7 @@ Treat the offline build as the source of truth; keep edits simple and runtime-li
 ## Axis Input ID Convention
 - Prefix `cl` (Cycle Life), `cd` (C/D), `dq` (dQ/dV)
 - Suffix `Xmin`, `Xmax`, `Ymin`, `Ymax`
+
+## GitHub
+- **Repo:** https://github.com/kluorvoeDing/cycle-data-parser
+- **Owner:** kluorvoeDing
