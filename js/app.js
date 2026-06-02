@@ -417,8 +417,10 @@ function renderCDCurves() {
   const total = cyclesToShow.length;
 
   // Color gradients for distinct curves
-  const chargeColor = (t) => `rgb(${Math.min(255,Math.round(255*(0.8+0.2*(1-t))))},${Math.min(255,Math.round(255*(0.4+0.4*t)))},${Math.min(255,Math.round(255*(0.2+0.3*(1-t))))})`;
-  const dischargeColor = (t) => `rgb(${Math.min(255,Math.round(255*(0.2+0.3*t)))},${Math.min(255,Math.round(255*(0.5+0.3*(1-t))))},${Math.min(255,Math.round(255*(0.8+0.2*(1-t))))})`;
+  // More distinct charge colors: red-orange gradient
+const chargeColor = (t) => `rgb(${255},${Math.round(100 + t * 100)},${Math.round(50 + t * 50)})`;
+  // More distinct discharge colors: blue-cyan gradient
+const dischargeColor = (t) => `rgb(${Math.round(50 + t * 50)},${Math.round(150 + t * 80)},${255})`;
 
   cyclesToShow.forEach((cn, i) => {
     const t = total > 1 ? i / (total - 1) : 0;
@@ -435,9 +437,20 @@ function renderCDCurves() {
           const vMin = Math.min(...vVals), vMax = Math.max(...vVals);
           const vRange = vMax - vMin;
           if (vRange > 0.01) {
-            const vLo = vMin + vRange * 0.15;
-            const vHi = vMax - vRange * 0.10;
+            // Smoother boundary trim to reduce edge artifacts
+            const vLo = vMin + vRange * 0.12;
+            const vHi = vMax - vRange * 0.12;
             let segMain = seg.filter(r => r.Voltage_V >= vLo && r.Voltage_V <= vHi);
+            // Additional smoothing: remove points with large voltage jumps
+            if (segMain.length > 2) {
+              const smoothed = [segMain[0]];
+              for (let i = 1; i < segMain.length - 1; i++) {
+                const dv = Math.abs(segMain[i].Voltage_V - segMain[i-1].Voltage_V);
+                if (dv < 0.1) smoothed.push(segMain[i]); // Skip points with large voltage jumps
+              }
+              smoothed.push(segMain[segMain.length-1]);
+              segMain = smoothed;
+            }
             segMain = segMain.slice().sort((a, b) => a.Ah_rel - b.Ah_rel);
             if (segMain.length >= 2) {
               const minAh = segMain[0].Ah_rel;
@@ -451,9 +464,9 @@ function renderCDCurves() {
                   line: { shape: 'linear', width: 1.2, color: chargeColor(t) },
                   name: showLegend ? (i===0 ? `C${cn} Charge (first)` : `C${cn} Charge (last)`) : `C${cn}`,
                   legendgroup: 'charge',
-                  showlegend: showLegend,
+                  showlegend: true, // Show all cycles
                   hovertemplate: `Cycle ${cn}<br>V: %{y:.4f}V<br>SOC: %{x:.1f}%<extra></extra>`,
-                  opacity: 0.85,
+                  // opacity removed for clarity
                 });
               }
             }
@@ -486,9 +499,9 @@ function renderCDCurves() {
                 line: { shape: 'linear', width: 1.2, color: dischargeColor(t) },
                 name: showLegend ? (i===0 ? `C${cn} Discharge (first)` : `C${cn} Discharge (last)`) : `C${cn}`,
                 legendgroup: 'discharge',
-                showlegend: showLegend,
+                showlegend: true, // Show all cycles
                 hovertemplate: `Cycle ${cn}<br>V: %{y:.4f}V<br>SOC: %{x:.1f}%<extra></extra>`,
-                opacity: 0.85,
+                // opacity removed for clarity
               });
             }
           }
@@ -532,9 +545,11 @@ function renderDQDV() {
       if (pts.length === 0) return;
       const t = total > 1 ? i / (total - 1) : 0;
       const isCharge = action === 'CHARGE';
-      const r = Math.min(255, Math.round(255 * (isCharge ? (0.8+0.2*(1-t)) : (0.2+0.3*t))));
-      const g = Math.min(255, Math.round(255 * (isCharge ? (0.4+0.4*t) : (0.5+0.3*(1-t)))));
-      const b = Math.min(255, Math.round(255 * (isCharge ? (0.2+0.3*(1-t)) : (0.8+0.2*(1-t)))));
+      // More distinct color gradient for better cycle separation
+      const hue = isCharge ? (180 + t * 60) : (200 - t * 80); // Blue to cyan for charge, blue to purple for discharge
+      const r = Math.round(255 * (0.3 + 0.4 * (1-t)));
+      const g = Math.round(255 * (0.5 + 0.3 * t));
+      const b = Math.round(255 * (0.7 + 0.3 * (1-t)));
       const color = `rgb(${r},${g},${b})`;
 
       traces.push({
@@ -543,9 +558,9 @@ function renderDQDV() {
         line: { width: 1.2, color },
         name: `C${cn} ${action}`,
         legendgroup: action,
-        showlegend: i === 0 || i === total - 1,
+        showlegend: true, // Show all cycles
         hovertemplate: `Cycle ${cn}<br>V: %{x:.4f}V<br>dQ/dV: %{y:.2f}<extra></extra>`,
-        opacity: 0.85,
+        // opacity removed for clarity
       });
     });
   });
