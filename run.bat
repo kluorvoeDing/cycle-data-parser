@@ -1,2 +1,2 @@
 @echo off
-start "" "%~dp0index.html"
+start "" "%~dp0index_offline.html"
