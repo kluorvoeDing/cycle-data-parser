@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🔋 電池充放電數據分析</title>
+  <!-- SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Plotly.js -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="header">
+  <h1>🔋 電池充放電數據分析</h1>
+  <span class="file-name" id="fileName">未載入檔案</span>
+</div>
+
+<div class="container">
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div>
+      <h3>檔案上傳</h3>
+      <div class="upload-area" id="uploadArea">
+        <div class="icon">📂</div>
+        <div class="text">點擊或拖曳上傳 .xlsx / .csv / .fud 檔案</div>
+        <input type="file" id="fileInput" accept=".xlsx,.csv,.fud">
+      </div>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="ctrl-group">
+      <label>循環範圍</label>
+      <input type="range" id="rangeMin" min="1" max="100" value="1" style="width:100%">
+      <input type="range" id="rangeMax" min="1" max="100" value="100" style="width:100%">
+      <div class="range-labels">
+        <span id="rangeLabelMin">1</span>
+        <span id="rangeLabelMax">100</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group" id="retentionGroup">
+      <label>Retention 分母</label>
+      <select id="refMode">
+        <option value="auto">自動 (最大放電容量)</option>
+        <option value="manual">手動輸入 (Ah)</option>
+      </select>
+      <input type="number" id="refManual" placeholder="Ah" step="0.001" style="display:none">
+    </div>
+
+    <div class="ctrl-group">
+      <label>字體大小</label>
+      <div class="font-size-row">
+        <input type="number" id="fontSize" value="12" min="8" max="24" step="1">
+        <span style="font-size:11px;color:#718096">pt</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group" id="dqdvGroup">
+      <label>dQ/dV 平滑 (Savitzky-Golay)</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <label style="font-size:11px">Window</label>
+        <select id="sgWindow" style="flex:1">
+          <option value="5">5</option>
+          <option value="7">7</option>
+          <option value="9">9</option>
+          <option value="11" selected>11</option>
+          <option value="15">15</option>
+          <option value="21">21</option>
+        </select>
+        <label style="font-size:11px">Order</label>
+        <select id="sgOrder" style="flex:1">
+          <option value="1">1</option>
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>曲線顯示</label>
+      <select id="curveDisplay" style="padding:6px 10px;border:1px solid #cbd5e0;border-radius:6px;font-size:13px">
+        <option value="all">顯示所有循環</option>
+        <option value="first_last">僅顯示首尾圈</option>
+        <option value="interval_5">每 5 圈顯示一次</option>
+        <option value="interval_10">每 10 圈顯示一次</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="cycleLife">Cycle Life</button>
+      <button class="tab-btn" data-tab="cdCurves">C/D Curves</button>
+      <button class="tab-btn" data-tab="dqdV">dQ/dV vs V</button>
+    </div>
+
+    <div class="chart-area">
+      <!-- Tab 1: Cycle Life -->
+      <div class="chart-pane active" id="pane-cycleLife">
+        <div class="pane-controls">
+          <label>Y 軸：</label>
+          <select id="cycleY" style="padding:4px 8px;font-size:12px;border:1px solid #cbd5e0;border-radius:4px">
+            <option value="retention">Retention (%)</option>
+            <option value="ccratio">CC Ratio (%)</option>
+            <option value="ce">Coulombic Efficiency (%)</option>
+          </select>
+          <span style="width:1px;height:18px;background:#e2e8f0"></span>
+          <label>X 軸</label>
+          <input type="number" id="clXmin" placeholder="min" step="any" value="0" style="width:72px">
+          <span style="font-size:11px;color:#a0aec0">~</span>
+          <input type="number" id="clXmax" placeholder="max" step="any" value="500" style="width:72px">
+          <label>Y 軸</label>
+          <input type="number" id="clYmin" placeholder="min" step="any" value="0" style="width:72px">
+          <span style="font-size:11px;color:#a0aec0">~</span>
+          <input type="number" id="clYmax" placeholder="max" step="any" value="100" style="width:72px">
+        </div>
+        <div class="chart-wrap" id="chart-cycleLife"></div>
+      </div>
+
+      <!-- Tab 2: C/D Curves -->
+      <div class="chart-pane" id="pane-cdCurves">
+        <div class="pane-controls">
+          <label>顯示模式：</label>
+          <div class="radio-group">
+            <input type="radio" name="cdMode" id="cdCharge" value="charge" checked>
+            <label for="cdCharge">Charge</label>
+            <input type="radio" name="cdMode" id="cdDischarge" value="discharge">
+            <label for="cdDischarge">Discharge</label>
+            <input type="radio" name="cdMode" id="cdOverlay" value="overlay">
+            <label for="cdOverlay">Overlay</label>
+          </div>
+          <span style="width:1px;height:18px;background:#e2e8f0"></span>
+          <label>X 軸</label>
+          <input type="number" id="cdXmin" placeholder="min" step="any" value="0" style="width:72px">
+          <span style="font-size:11px;color:#a0aec0">~</span>
+          <input type="number" id="cdXmax" placeholder="max" step="any" value="100" style="width:72px">
+          <label>Y 軸</label>
+          <input type="number" id="cdYmin" placeholder="min" step="any" value="0" style="width:72px">
+          <span style="font-size:11px;color:#a0aec0">~</span>
+          <input type="number" id="cdYmax" placeholder="max" step="any" value="5" style="width:72px">
+        </div>
+        <div class="chart-wrap" id="chart-cdCurves"></div>
+      </div>
+
+      <!-- Tab 3: dQ/dV -->
+      <div class="chart-pane" id="pane-dqdV">
+        <div class="pane-controls">
+          <label>區段：</label>
+          <div class="radio-group">
+            <input type="radio" name="dqMode" id="dqCharge" value="CHARGE" checked>
+            <label for="dqCharge">Charge</label>
+            <input type="radio" name="dqMode" id="dqDischarge" value="DISCHARGE">
+            <label for="dqDischarge">Discharge</label>
+            <input type="radio" name="dqMode" id="dqBoth" value="BOTH">
+            <label for="dqBoth">Both</label>
+          </div>
+          <span style="width:1px;height:18px;background:#e2e8f0"></span>
+          <label>X 軸</label>
+          <input type="number" id="dqXmin" placeholder="min" step="any" value="2.5" style="width:72px">
+          <span style="font-size:11px;color:#a0aec0">~</span>
+          <input type="number" id="dqXmax" placeholder="max" step="any" value="5" style="width:72px">
+          <label>Y 軸</label>
+          <input type="number" id="dqYmin" placeholder="min" step="any" style="width:72px">
+          <span style="font-size:11px;color:#a0aec0">~</span>
+          <input type="number" id="dqYmax" placeholder="max" step="any" style="width:72px">
+        </div>
+        <div class="chart-wrap" id="chart-dqdV"></div>
+      </div>
+
+      <div class="placeholder" id="placeholder">
+        <span style="font-size:40px">📊</span>
+        <span>請上傳 Excel 檔案開始分析</span>
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary-bar" id="summaryBar" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="metrics" id="summaryMetrics"></div>
+        <button class="summary-toggle" id="summaryToggle">顯示詳細資料 ▼</button>
+      </div>
+      <div class="summary-table-wrap" id="summaryTable"></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
